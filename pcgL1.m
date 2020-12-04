@@ -5,6 +5,8 @@ function x = pcgL1(A, b, lambda, varargin)
 %
 %   minimize (1/2)*||Ax-b||_2^2 + λ*||x||_1,
 %
+% where A is symmetric positive definite (same as pcg).
+%
 % Meant to be used with anonymous functions, A = @(x)myfunc(x),
 % where myfunc(x) should return:
 %
@@ -34,7 +36,11 @@ end
 %% check arguments
 
 if nargin<2
-    error('Not enough input arguments.');
+    warning('Not enough input arguments: b missing');
+end
+if nargin<3
+    lambda = 0;
+    warning('Not enough input arguments. Setting lambda=%f',lambda);
 end
 if ~iscolumn(b)
     error('b argument must be a column vector');
@@ -49,12 +55,20 @@ end
 
 % check A is square [n x n]
 try
-if ~isequal(size(A(b)),[n 1])
+    tmp = A(b);
+catch ME
+    error('A(x) failed when passed a vector of length %i',n);
+end   
+if ~isequal(size(tmp),[n 1])
     error('A(x) did not return a vector of length %i',n);
 end
-catch
-    error('A(x) failed when passed a vector of length %i',n);
+
+% check for positive definiteness (50% chance of catching error)
+tmp = b'*tmp; % x'Ax > 0
+if abs(imag(tmp)) > n*eps(tmp) || real(tmp) < -n*eps(tmp)
+    warning('Matrix operator A may not be positive definite.');
 end
+clear tmp;
 
 %% ADMM solver
 
@@ -80,7 +94,7 @@ for k = 1:opts.maxit
     z = shrinkage(x_hat + u, lambda/opts.rho);
 
     if ~any(z(:))
-        error('Too sparse (all zero), reduce lambda.');
+        error('Too sparse (all zero). Reduce lambda or check A(x) is positive definite: x''A(x) > 0.');
     end
     
     u = u + (x_hat - z);
